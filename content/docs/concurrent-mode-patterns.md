@@ -15,49 +15,48 @@ next: concurrent-mode-adoption.html
 
 <div class="scary">
 
->Caution:
+>Perhatian:
 >
->This page describes **experimental features that are [not yet available](/docs/concurrent-mode-adoption.html) in a stable release**. Don't rely on experimental builds of React in production apps. These features may change significantly and without a warning before they become a part of React.
+>Laman ini menjelaskan **fitur eksperimental yang [belum tersedia](/docs/concurrent-mode-adoption.html) dalam versi rilis yang stabil**. Jangan mengandalkan _build_ eksperimental dalam aplikasi React versi produksi. Fitur ini dapat berubah secara signifikan dan tanpa peringatan sebelum menjadi bagian dari React.
 >
->This documentation is aimed at early adopters and people who are curious. **If you're new to React, don't worry about these features** -- you don't need to learn them right now. For example, if you're looking for a data fetching tutorial that works today, read [this article](https://www.robinwieruch.de/react-hooks-fetch-data/) instead.
+>Dokumentasi ini ditujukan untuk pengguna awal dan orang-orang yang penasaran. **Kalau Anda baru menggunakan React, jangan khawatir tentang fitur ini** -- anda tidak perlu mempelajarinya sekarang.
 
 </div>
 
-Usually, when we update the state, we expect to see changes on the screen immediately. This makes sense because we want to keep our app responsive to user input. However, there are cases where we might prefer to **defer an update from appearing on the screen**.
+Biasanya, ketika kita mengubah state, kita akan langsung melihat perubahannya di layar. Ini masuk akal karena kita ingin aplikasi responsif terhadap input user. Tetapi, mungkin ada kasus dimana kita lebih memilih untuk **menunda perubahan yang terjadi di layar**
 
-For example, if we switch from one page to another, and none of the code or data for the next screen has loaded yet, it might be frustrating to immediately see a blank page with a loading indicator. We might prefer to stay longer on the previous screen. Implementing this pattern has historically been difficult in React. Concurrent Mode offers a new set of tools to do that.
-
-- [Transitions](#transitions)
-  - [Wrapping setState in a Transition](#wrapping-setstate-in-a-transition)
-  - [Adding a Pending Indicator](#adding-a-pending-indicator)
-  - [Reviewing the Changes](#reviewing-the-changes)
-  - [Where Does the Update Happen?](#where-does-the-update-happen)
-  - [Transitions Are Everywhere](#transitions-are-everywhere)
-  - [Baking Transitions Into the Design System](#baking-transitions-into-the-design-system)
-- [The Three Steps](#the-three-steps)
+Contohnya, ketika kita pindah laman, dan belum ada data yang tersedia untuk laman selanjutnya, mungkin kita akan merasa frustasi ketika melihat laman dengan loading. Kita mungkin lebih memilih untuk tetap berada di laman sebelumnya. Meng-implementasi pola ini secara historis sulit dalam React. Concurrent Mode menawarkan seperangkat alat baru untuk melakukan itu.
+- [Transisi](#transitions)
+  - [Setstate di Dalam Transisi](#wrapping-setstate-in-a-transition)
+  - [Menambah Indikator Tunggu](#adding-a-pending-indicator)
+  - [Me-review Perubahan](#reviewing-the-changes)
+  - [Di Mana Perubahan Yerjadi?](#where-does-the-update-happen)
+  - [Transisi di Setiap Tempat](#transitions-are-everywhere)
+  - [Memadukan Transisi ke Dalam _Design System_](#baking-transitions-into-the-design-system)
+- [Tiga Langkah](#the-three-steps)
   - [Default: Receded → Skeleton → Complete](#default-receded-skeleton-complete)
-  - [Preferred: Pending → Skeleton → Complete](#preferred-pending-skeleton-complete)
+  - [Diinginkan: Pending → Skeleton → Complete](#preferred-pending-skeleton-complete)
   - [Wrap Lazy Features in `<Suspense>`](#wrap-lazy-features-in-suspense)
   - [Suspense Reveal “Train”](#suspense-reveal-train)
   - [Delaying a Pending Indicator](#delaying-a-pending-indicator)
   - [Recap](#recap)
-- [Other Patterns](#other-patterns)
-  - [Splitting High and Low Priority State](#splitting-high-and-low-priority-state)
-  - [Deferring a Value](#deferring-a-value)
+- [Cara lain](#other-patterns)
+  - [Memisahkan State dengan Prioritas Tinggi dan Rendah](#splitting-high-and-low-priority-state)
+  - [Menangguhkan Sebuah Nilai](#deferring-a-value)
   - [SuspenseList](#suspenselist)
-- [Next Steps](#next-steps)
+- [Selanjutnya](#next-steps)
 
-## Transitions {#transitions}
+## Transisi {#transitions}
 
-Let's revisit [this demo](https://codesandbox.io/s/infallible-feather-xjtbu) from the previous page about [Suspense for Data Fetching](/docs/concurrent-mode-suspense.html).
+Mari buka kembali [demo berikut](https://codesandbox.io/s/infallible-feather-xjtbu) dari the laman sebelumnya mengenai [Suspense for Data Fetching](/docs/concurrent-mode-suspense.html).
 
-When we click the "Next" button to switch the active profile, the existing page data immediately disappears, and we see the loading indicator for the whole page again. We can call this an "undesirable" loading state. **It would be nice if we could "skip" it and wait for some content to load before transitioning to the new screen.**
+Ketika kita klik Tombol "Next" untuk mengubah profil aktif, data laman sebelumnya langsung menghilang, dan kita melihat indikator loading untuk seluruh laman lagi. Kita bisa menyebut hal ini loading state yang "tidak diinginkan". **Akan lebih baik jika kita bisa "melewatinya" dan menunggu konten tersebut selesai di load sebelum pindah ke laman baru**
 
-React offers a new built-in `useTransition()` Hook to help with this.
+React punya Hook khusus `useTransition()` untuk menangani masalah ini.
 
-We can use it in three steps.
+Kita bisa menggunakannya dengan 3 langkah.
 
-First, we'll make sure that we're actually using Concurrent Mode. We'll talk more about [adopting Concurrent Mode](/docs/concurrent-mode-adoption.html) later, but for now it's sufficient to know that we need to use `ReactDOM.createRoot()` rather than `ReactDOM.render()` for this feature to work:
+Pertama, Kita harus menggunakan Concurrent Mode. Kita akan membahas lebih lanjut tentang [mengadopsi Concurrent Mode](/docs/concurrent-mode-adoption.html) lain waktu, untuk sekarang kita hanya perlu tahu kalau kita akan menggunakan `ReactDOM.createRoot()` daripada `ReactDOM.render()` agar fitur berikut dapat bekerja:
 
 ```js
 const rootElement = document.getElementById("root");
@@ -65,13 +64,13 @@ const rootElement = document.getElementById("root");
 ReactDOM.createRoot(rootElement).render(<App />);
 ```
 
-Next, we'll add an import for the `useTransition` Hook from React:
+Selanjutnya kita import hook`useTransition` dari React:
 
 ```js
 import React, { useState, useTransition, Suspense } from "react";
 ```
 
-Finally, we'll use it inside the `App` component:
+Terakhir, kita pakai hook tersebut di dalam komponen `App`:
 
 ```js{3-5}
 function App() {
@@ -82,18 +81,18 @@ function App() {
   // ...
 ```
 
-**By itself, this code doesn't do anything yet.** We will need to use this Hook's return values to set up our state transition. There are two values returned from `useTransition`:
+**Dengan sendirinya, kode ini tidak melakukan apapun.** Kita akan menggunakan nilai return dari Hook ini untuk mempersiapkan transisi state kita. Ada dua nilai yang di return dari `useTransition`":
 
-* `startTransition` is a function. We'll use it to tell React *which* state update we want to defer.
-* `isPending` is a boolean. It's React telling us whether that transition is ongoing at the moment.
+* `startTransition` adalah fungsi. Fungsi ini akan kita gunakan untuk memberi tahu React state *mana* yang ingin kita tunda.
+* `isPending` adalah boolean. React memberi tahu apakah transisi sedang terjadi atau tidak.
 
-We will use them right below.
+Kita akan menggunakannya seperti berikut.
 
-Note we passed a configuration object to `useTransition`. Its `timeoutMs` property specifies **how long we're willing to wait for the transition to finish**. By passing `{timeoutMs: 3000}`, we say "If the next profile takes more than 3 seconds to load, show the big spinner -- but before that timeout it's okay to keep showing the previous screen".
+Kita menggunakan objek konfigurasi ke `useTransition`. Properti `timeoutMs` menspesifikasi **berapa lama kita ingin menunggu transisi untuk selesai**. Dengan mengoper `{timeoutMs: 3000}`, berarti kita mengatakan "Jika profil perlu lebih dari 3 detik untuk load, tampilkan loading berputar -- tapi sebelum timeout kita bisa tetap memperlihatkan layar sebelumnya".
 
-### Wrapping setState in a Transition {#wrapping-setstate-in-a-transition}
+### Setstate di Dalam Transisi {#wrapping-setstate-in-a-transition}
 
-Our "Next" button click handler sets the state that switches the current profile in the state:
+Handler klik tombol "Next" kita, mengubah state yang mengganti profile saat ini:
 
 ```js{4}
 <button
@@ -104,7 +103,7 @@ Our "Next" button click handler sets the state that switches the current profile
 >
 ```
 
- We'll wrap that state update into `startTransition`. That's how we tell React **we don't mind React delaying that state update** if it leads to an undesirable loading state:
+Kita akan membungkus perubahan state tersebut didalam `startTransition`. Dengan begitu, kita memberitahu React untuk **Boleh delay update state tersebut** jika perubahan tersebut membuat loading state yang tidak diinginkan:
 
 ```js{3,6}
 <button
@@ -117,23 +116,23 @@ Our "Next" button click handler sets the state that switches the current profile
 >
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/musing-driscoll-6nkie)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/musing-driscoll-6nkie)**
 
-Press "Next" a few times. Notice it already feels very different. **Instead of immediately seeing an empty screen on click, we now keep seeing the previous page for a while.** When the data has loaded, React transitions us to the new screen.
+Tekan "Next" beberapa kali. Jika diperhatikan, akan terasa bedanya. **Daripada langsung melihat layar kosong ketika klik, sekarang kita melihat layar sebelumnya untuk beberapa saat.** Ketika data sudah dimuat, React mengarahkan kita ke layar baru.
 
-If we make our API responses take 5 seconds, [we can confirm](https://codesandbox.io/s/relaxed-greider-suewh) that now React "gives up" and transitions anyway to the next screen after 3 seconds. This is because we passed `{timeoutMs: 3000}` to `useTransition()`. For example, if we passed `{timeoutMs: 60000}` instead, it would wait a whole minute.
+Jika kita membuat _response_ API menunggu selama 5 detik, [kita bisa memastikan](https://codesandbox.io/s/relaxed-greider-suewh) kalau React "menyerah" dan langsung mengarahkan kita ke layar selanjutnya setelah 3 detik. Ini karena kita telah melewati batas `{timeoutMs: 3000}` untuk `useTransition()`. Contohnya, jika kita set `{timeoutMs: 60000}`, React akan menunggu selama semenit penuh.
 
-### Adding a Pending Indicator {#adding-a-pending-indicator}
+### Menambah Indikator Tunggu {#adding-a-pending-indicator}
 
-There's still something that feels broken about [our last example](https://codesandbox.io/s/musing-driscoll-6nkie). Sure, it's nice not to see a "bad" loading state. **But having no indication of progress at all feels even worse!** When we click "Next", nothing happens and it feels like the app is broken.
+Ada sesuatu yang masih merasa tidak benar di [contoh kita sebelumnya](https://codesandbox.io/s/musing-driscoll-6nkie). Memang terasa lebih bagus ketika kita tidak melihat _state_ memuat yang "buruk". **Namun lebih buruk lagi ketika tidak ada indikasi progres!** Ketika kita mengklik "Next", tidak ada yang terjadi dan aplikasi kita terasa seperti rusak.
 
-Our `useTransition()` call returns two values: `startTransition` and `isPending`.
+Pemanggilan `useTransition()` mengembalikan dua nilai: `startTransition` dan `isPending`.
 
 ```js
   const [startTransition, isPending] = useTransition({ timeoutMs: 3000 });
 ```
 
-We've already used `startTransition` to wrap the state update. Now we're going to use `isPending` too. React gives this boolean to us so we can tell whether **we're currently waiting for this transition to finish**. We'll use it to indicate that something is happening:
+Kita telah menggunakan `startTransition` untuk membungkus perubahan _state_. Sekarang kita juga akan menggunakan `isPending`. React memberikan nilai boolean ini kepada kita supaya kita dapat mengetahui apakah **kita sedang menunggu transisi ini selesai**. Kita menggunakan ini untuk mengindikasikan sesuatu sedang terjadi:
 
 ```js{4,14}
 return (
@@ -155,13 +154,13 @@ return (
 );
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/jovial-lalande-26yep)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/jovial-lalande-26yep)**
 
-Now, this feels a lot better! When we click Next, it gets disabled because clicking it multiple times doesn't make sense. And the new "Loading..." tells the user that the app didn't freeze.
+Sekarang, ini terasa lebih baik! Ketika kita mengklik Next, tombolnya di-_disable_ karena mengkliknya beberapa kali tidak masuk akal. Dan teks "Loading..." memberitahu pengguna bahwa aplikasi tidak sedang _freeze_.
 
-### Reviewing the Changes {#reviewing-the-changes}
+### Me-review Perubahan {#reviewing-the-changes}
 
-Let's take another look at all the changes we've made since the [original example](https://codesandbox.io/s/infallible-feather-xjtbu):
+Mari kita ulas kembali perubahan-perubahan yang kita buat sejak [contoh awal](https://codesandbox.io/s/infallible-feather-xjtbu):
 
 ```js{3-5,9,11,14,19}
 function App() {
@@ -189,40 +188,40 @@ function App() {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/jovial-lalande-26yep)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/jovial-lalande-26yep)**
 
-It took us only seven lines of code to add this transition:
+Menambahkan transisi ini hanya memerlukan 7 baris kode:
 
-* We've imported the `useTransition` Hook and used it the component that updates the state.
-* We've passed `{timeoutMs: 3000}` to stay on the previous screen for at most 3 seconds.
-* We've wrapped our state update into `startTransition` to tell React it's okay to delay it.
-* We're using `isPending` to communicate the state transition progress to the user and to disable the button.
+* Kita meng-import Hook `useTransition` dan menggunakannya dalam komponen yang merubah _state_.
+* Kita mengoper `{timeoutMs: 3000}` untuk bertahan di layar sebelumnya paling lama 3 detik.
+* Kita membungkus perubahan _state_ dalam `startTransition` untuk memberitahu React tidak apa-apa menundanya.
+* Kita menggunakan `isPending` untuk mengkomunikasikan progres transisi _state_ ke pengguna dan men-_disable_ tombolnya.
 
-As a result, clicking "Next" doesn't perform an immediate state transition to an "undesirable" loading state, but instead stays on the previous screen and communicates progress there.
+Hasilnya, mengklik "Next" tidak melakukan transisi _state_ secara langsung ke _state_ memuat yang "tidak diinginkan", namun bertahan di layar berikutnya dan mengkomunikasikan progres lewatnya.
 
-### Where Does the Update Happen? {#where-does-the-update-happen}
+### Di Mana Perubahan Terjadi? {#where-does-the-update-happen}
 
-This wasn't very difficult to implement. However, if you start thinking about how this could possibly work, it might become a little mindbending. If we set the state, how come we don't see the result right away? *Where* is the next `<ProfilePage>` rendering?
+Mengimplementasi ini tidak terlalu sulit. Namun, jika Anda mulai memikirkan bagaimana cara kerjanya, akan menjadi lebih memeras otak. Jika kita mengeset _state_-nya, bagaimana caranya kita tidak melihat hasilnya secara langsung? *Di mana* `<ProfilePage>` yang selanjutnya me-_render_?
 
-Clearly, both "versions" of `<ProfilePage>` exist at the same time. We know the old one exists because we see it on the screen and even display a progress indicator on it. And we know the new version also exists *somewhere*, because it's the one that we're waiting for!
+Jelasnya, kedua "versi" `<ProfilePage>` ada dalam waktu yang sama. Kita tahu versi yang lama ada karena kita dapat melihatnya di layar dan bahkan menunjukkan indikator progress. Dan kita juga tahu versi yang baru berada *di suatu tempat*, karena ini yang kita inginkan!
 
-**But how can two versions of the same component exist at the same time?**
+**Tapi bagaimana kedua versi komponen yang sama dapat tersedia dalam waktu yang sama?**
 
-This gets at the root of what Concurrent Mode is. We've [previously said](/docs/concurrent-mode-intro.html#intentional-loading-sequences) it's a bit like React working on state update on a "branch". Another way we can conceptualize is that wrapping a state update in `startTransition` begins rendering it *"in a different universe"*, much like in science fiction movies. We don't "see" that universe directly -- but we can get a signal from it that tells us something is happening (`isPending`). When the update is ready, our "universes" merge back together, and we see the result on the screen!
+Di sinilah kita mulai menuju ke akarnya Concurrent Mode. Kita telah [mengungkapkan sebelumnya](/docs/concurrent-mode-intro.html#intentional-loading-sequences) Concurrent Mode seperti React mengerjakan perubahan _state_ dalam sebuah "branch". Cara lain kita dapat memahami konsepnya adalah membungkus perubahan _state_ di dalam `startTransition` memulai proses render *"di alam semesta yang berbeda"*, layaknya film fiksi ilmiah. Kita tidak dapat "melihat" alam semesta tersebut secara langsung -- namun kita dapat mendapatkan sinyal darinya yang memberitahukan sesuatu sedang terjadi (`isPending`). Ketika perubahan telah siap, "alam semesta" kita menyatu kembali, dan kita melihat hasilnya di layar!
 
-Play a bit more with the [demo](https://codesandbox.io/s/jovial-lalande-26yep), and try to imagine it happening.
+Bermainlah lagi dengan [demo-nya](https://codesandbox.io/s/jovial-lalande-26yep), bayangkan hal itu terjadi.
 
-Of course, two versions of the tree rendering *at the same time* is an illusion, just like the idea that all programs run on your computer at the same time is an illusion. An operating system switches between different applications very fast. Similarly, React can switch between the version of the tree you see on the screen and the version that it's "preparing" to show next.
+Tentu saja, dua versi dari sebuah diagram komponen me-_render_ *di waktu yang sama* hanyalah ilusi, layaknya semua program berjalan di komputer Anda di waktu yang sama hanyalah ilusi. Sebuah sistem operasi beralih antar aplikasi dalam waktu yang sangat cepat. Seperti itu jugalah React dapat beralih antar versi diagram komponen dalam layar dan versi yang sedang "dipersiapkan" untuk ditampilkan selanjutnya.
 
-An API like `useTransition` lets you focus on the desired user experience, and not think about the mechanics of how it's implemented. Still, it can be a helpful metaphor to imagine that updates wrapped in `startTransition` happen "on a branch" or "in a different world".
+API seperti `useTransition` memungkinkan Anda untuk berfokus kepada _user experience_ yang diinginkan, dan tidak terlalu memikirkan teknis implementasinya. Namun membayangkan perubahan yang dibungkus dalam `startTransition` terjadi "di dalam branch" atau "di dunia lain" tetap menjadi metafor yang membantu.
 
-### Transitions Are Everywhere {#transitions-are-everywhere}
+### Transisi di Setiap Tempat {#transitions-are-everywhere}
 
-As we learned from the [Suspense walkthrough](/docs/concurrent-mode-suspense.html), any component can "suspend" any time if some data it needs is not ready yet. We can strategically place `<Suspense>` boundaries in different parts of the tree to handle this, but it won't always be enough.
+Seperti yang telah kita pelajari di [_walkthrough_ Suspense](/docs/concurrent-mode-suspense.html), setiap komponen dapat "menunda" setiap waktu ketika data yang diperlukan belum tersedia. Kita dapat menempatkan batas-batas `<Suspense>` secara strategis di tempat-tempat berbeda dalam diagram komponen untuk menangani ini, namun cara ini tidak selalu cukup.
 
-Let's get back to our [first Suspense demo](https://codesandbox.io/s/frosty-hermann-bztrp) where there was just one profile. Currently, it fetches the data only once. We'll add a "Refresh" button to check for server updates.
+Mari kita kembali ke [demo pertama Suspense](https://codesandbox.io/s/frosty-hermann-bztrp) ketika hanya ada satu profil pengguna. Saat ini, komponen ini hanya menarik data sekali. Kita ingin menambahkan tombol "Refresh" untuk mengecek perubahan dari peladen.
 
-Our first attempt might look like this:
+Percobaan pertama kita mungkin terlihat seperti ini:
 
 ```js{6-8,13-15}
 const initialResource = fetchUserAndPosts();
@@ -248,13 +247,13 @@ function ProfilePage() {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/boring-shadow-100tf)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/boring-shadow-100tf)**
 
-In this example, we start data fetching at the load *and* every time you press "Refresh". We put the result of calling `fetchUserAndPosts()` into state so that components below can start reading the new data from the request we just kicked off.
+Dalam contoh ini, kita memulai penarikan data di saat memuat *dan* setiap kali Anda menekan "Refresh". Kita menaruh hasil panggilan `fetchUserAndPosts()` ke dalam _state_ sehingga komponen-komponen di bawahnya dapat memulai membaca data baru dari _request_ yang kita baru jalankan.
 
-We can see in [this example](https://codesandbox.io/s/boring-shadow-100tf) that pressing "Refresh" works. The `<ProfileDetails>` and `<ProfileTimeline>` components receive a new `resource` prop that represents the fresh data, they "suspend" because we don't have a response yet, and we see the fallbacks. When the response loads, we can see the updated posts (our fake API adds them every 3 seconds).
+Kita dapat melihat [di contoh ini](https://codesandbox.io/s/boring-shadow-100tf) bahwa menekan tombol "Refresh" berhasil. Komponen `<ProfileDetails>` dan `<ProfileTimeline>` menerima _props_ `resource` baru yang merepresentasikan data baru, komponen-komponen ini "menunda" perunahan karena kita belum mendapatkan _response_, dan kita dapat melihat kondisi _fallback_. Ketika _response_ telah dimuat, kita dapat melihat daftar postingan yang diperbarui (API tiruan kita menambahkannya setiap 3 detik).
 
-However, the experience feels really jarring. We were browsing a page, but it got replaced by a loading state right as we were interacting with it. It's disorienting. **Just like before, to avoid showing an undesirable loading state, we can wrap the state update in a transition:**
+Namun, pengalaman pengguna akan menjadi tidak enak. Ketika kita sedang _browsing_ sebuah halaman, namun tiba-tiba seluruh halaman diubah menjadi _state_ loading sesaat sebelum kita akan berinteraksi dengannya, akan terasa membingungkan. **Seperti sebelumnya, untuk menghindari menampilkan _state_ _loading_ yang tidak diinginkan, kita dapat membungkus perubahan _state_ di dalam transisi:**
 
 ```js{2-5,9-11,21}
 function ProfilePage() {
@@ -287,15 +286,15 @@ function ProfilePage() {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/sleepy-field-mohzb)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/sleepy-field-mohzb)**
 
-This feels a lot better! Clicking "Refresh" doesn't pull us away from the page we're browsing anymore. We see something is loading "inline", and when the data is ready, it's displayed.
+Ini terasa lebih baik! Menekan tombol "Refresh" tidak akan menarik kita keluar dari halaman yang sedang kita liihat. Kita melihat sesuatu sedang dimuat secara "inline", dan ketika data telah siap, baru ditampilkan.
 
-### Baking Transitions Into the Design System {#baking-transitions-into-the-design-system}
+### Memadukan Transisi ke Dalam Design System {#baking-transitions-into-the-design-system}
 
-We can now see that the need for `useTransition` is *very* common. Pretty much any button click or interaction that can lead to a component suspending needs to be wrapped in `useTransition` to avoid accidentally hiding something the user is interacting with.
+Kita dapat melihat bahwa penggunaan `useTransition` sudah *sangat* diperlukan. Setiap tekanan tombol atau interaksi yang memerlukan penundaan komponen perlu dibungkus di dalam `useTransition` untuk menghindari menyembunyikan sesuatu yang pengguna sedang berinteraksi secara tidak sengaja.
 
-This can lead to a lot of repetitive code across components. This is why **we generally recommend to bake `useTransition` into the *design system* components of your app**. For example, we can extract the transition logic into our own `<Button>` component:
+Ini dapat mengasilkan penggunaan kode yang repetitif di berbagai komponen. Inilah kenapa **secara umum kita perlu memadukan `useTransition` ke dalam komponen *design system* di dalam aplikasi kita**. Sebagai contoh, kita dapat mengekstrak logika transisi ke dalam komponen `<Button>` kita:
 
 ```js{7-9,20,24}
 function Button({ children, onClick }) {
@@ -327,9 +326,9 @@ function Button({ children, onClick }) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/modest-ritchie-iufrh)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/modest-ritchie-iufrh)**
 
-Note that the button doesn't care *what* state we're updating. It's wrapping *any* state updates that happen during its `onClick` handler into a transition. Now that our `<Button>` takes care of setting up the transition, the `<ProfilePage>` component doesn't need to set up its own:
+Perlu dicatat bahwa tombol ini tidak memperdulikan _state_ _apa_ yang kita ubah. Ia membungkus perubahan _state_ _apapun_ yang terjadi di dalam _handler_ `onClick` ke dalam sebuah transisi. Karena `<Button>` sekarang yang melakukan pembuatan transisi, komponen `<ProfilePage>` tidak perlu membuatnya sendiri:
 
 ```js{4-6,11-13}
 function ProfilePage() {
@@ -353,37 +352,37 @@ function ProfilePage() {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/modest-ritchie-iufrh)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/modest-ritchie-iufrh)**
 
-When a button gets clicked, it starts a transition and calls `props.onClick()` inside of it -- which triggers `handleRefreshClick` in the `<ProfilePage>` component. We start fetching the fresh data, but it doesn't trigger a fallback because we're inside a transition, and the 10 second timeout specified in the `useTransition` call hasn't passed yet. While a transition is pending, the button displays an inline loading indicator.
+Ketika tombol diklik, ia akan memulai transisi dan memanggil `props.onClick()` di dalamnya -- yang memanggil `handleRefreshClick` di dalam komponen `<ProfilePage>`. Kita memulai menarik data yang baru, tapi tidak memanggil _fallback_ karena kita di dalam sebuah transisi, dan _timeout_ dengan durasi 10 detik yang dispesifikasikan di dalam panggilan `useTransition` belum terlewat. Ketika transisi sedang menunggu, tombol akan menunjukkan indikator _loading_ secara _inline_.
 
-We can see now how Concurrent Mode helps us achieve a good user experience without sacrificing isolation and modularity of components. React coordinates the transition.
+Kita dapat melihat bagaimana mode Concurrent membantu kita mendapatkan pengalaman pengguna yang baik tanpa mengorbankan isolasi dan modularitas dari komponen. React mengkoordinasikan transisinya.
 
-## The Three Steps {#the-three-steps}
+## Tiga Langkah {#the-three-steps}
 
-By now we have discussed all of the different visual states that an update may go through. In this section, we will give them names and talk about the progression between them.
+Sampai titik ini, kita telah mendiskusikan berbagai macam kondisi visual berbeda yang ditelusuri sebuah pembaruan data. Di bagian ini, kita akan memberikan mereka nama dan menjelaskan perjalanan di antaranya.
 
 <br>
 
 <img src="../images/docs/cm-steps-simple.png" alt="Three steps" />
 
-At the very end, we have the **Complete** state. That's where we want to eventually get to. It represents the moment when the next screen is fully rendered and isn't loading more data.
+Di paling akhir, terdapat _state_ **Complete**. Inilah _state_ yang ingin kita tuju. _State_ ini merepresentasikan moment di mana layar selanjutnya di-_render_ secara penuh dan tidak lagi memuat data.
 
-But before our screen can be Complete, we might need to load some data or code. When we're on the next screen, but some parts of it are still loading, we call that a **Skeleton** state.
+Namun sebelum layar kita menjadi Complete, kita mungkin perlu memuat data atau kode. Ketika kita berada di layar selanjutnya, namun beberapa bagian data tersebut masih memuat, kita sebut _state_ tersebut sebagai **Skeleton**.
 
-Finally, there are two primary ways that lead us to the Skeleton state. We will illustrate the difference between them with a concrete example.
+Akhirnya, ada dua cara utama yang membawa kita ke _state_ Skeleton. Kita akan mengilustrasikan perbedaan di antaranya dengan contoh konkret.
 
 ### Default: Receded → Skeleton → Complete {#default-receded-skeleton-complete}
 
-Open [this example](https://codesandbox.io/s/prod-grass-g1lh5) and click "Open Profile". You will see several visual states one by one:
+Bukalah [contoh berikut](https://codesandbox.io/s/prod-grass-g1lh5) dan tekan "Open Profile". Anda akan melihat beberapa _state_ visual satu persatu:
 
-* **Receded**: For a second, you will see the `<h1>Loading the app...</h1>` fallback.
-* **Skeleton:** You will see the `<ProfilePage>` component with `<h2>Loading posts...</h2>` inside.
-* **Complete:** You will see the `<ProfilePage>` component with no fallbacks inside. Everything was fetched.
+* **Receded**: Untuk beberapa saat, Anda akan melihat kondisi _fallback_ `<h1>Loading the app...</h1>`.
+* **Skeleton:** Anda akan melihat komponen `<ProfilePage>` dengan `<h2>Loading posts...</h2>` di dalamnya.
+* **Complete:** Anda akan melihat komponen `<ProfilePage>` tanpa _fallback_. Seluruh data dimuat.
 
-How do we separate the Receded and the Skeleton states? The difference between them is that the **Receded** state feels like "taking a step back" to the user, while the **Skeleton** state feels like "taking a step forward" in our progress to show more content.
+Bagaimana caranya kita memisahkan _state_ Receded dan Skeleton? Perbedaan di antara keduanya adalah _state_ **Receded** terasa seperti "mengambil langkah mundur" kepada pengguna, dan _state_ **Skeleton** terasa seperti "mengambil langkah maju" dalam perjalanan kita menampilkan lebih banyak konten.
 
-In this example, we started our journey on the `<HomePage>`:
+Dalam contoh berikut, perjalanan kita dimulai di `<HomePage>`:
 
 ```js
 <Suspense fallback={...}>
@@ -392,7 +391,7 @@ In this example, we started our journey on the `<HomePage>`:
 </Suspense>
 ```
 
-After the click, React started rendering the next screen:
+Setelah kita mengeklik, React memulai me-_render_ layar selanjutnya:
 
 ```js
 <Suspense fallback={...}>
@@ -406,7 +405,7 @@ After the click, React started rendering the next screen:
 </Suspense>
 ```
 
-Both `<ProfileDetails>` and `<ProfileTimeline>` need data to render, so they suspend:
+`<ProfileDetails>` dan `<ProfileTimeline>` memerlukan data untuk di-_render_, jadi kedua komponen tersebut ditunda:
 
 ```js{4,6}
 <Suspense fallback={...}>
@@ -420,11 +419,11 @@ Both `<ProfileDetails>` and `<ProfileTimeline>` need data to render, so they sus
 </Suspense>
 ```
 
-When a component suspends, React needs to show the closest fallback. But the closest fallback to `<ProfileDetails>` is at the top level:
+Saat komponen ditunda, React perlu menunjukkan komponen _fallback_ terdekat. Namun, komponen _fallback_ terdekat dari `<ProfileDetails>` terletak di tingkat atas:
 
 ```js{2,3,7}
 <Suspense fallback={
-  // We see this fallback now because of <ProfileDetails>
+  // Kita melihat _fallback_ ini karena <ProfileDetails>
   <h1>Loading the app...</h1>
 }>
   {/* next screen */}
@@ -437,9 +436,9 @@ When a component suspends, React needs to show the closest fallback. But the clo
 </Suspense>
 ```
 
-This is why when we click the button, it feels like we've "taken a step back". The `<Suspense>` boundary which was previously showing useful content (`<HomePage />`) had to "recede" to showing the fallback (`<h1>Loading the app...</h1>`). We call that a **Receded** state.
+Inilah mengapa kita kita mengklik tombol, terasa seperti kita "mengambil langkah mundur". Perbatasan `<Suspense>` yang sebelumnya menunjukkan konten (`<HomePage />`) yang dapat digunakan harus "mundur" untuk menunjukkan komponen _fallback_ (`<h1>Loading the app...</h1>`). Kita menyebut _state_ tersebut **Receded**.
 
-As we load more data, React will retry rendering, and `<ProfileDetails>` can render successfully. Finally, we're in the **Skeleton** state. We see the new page with missing parts:
+Saat kita memuat lebih banyak data, React akan mencoba ulang untuk me-_render_, dan `<ProfileDetails>` dapat di-_render_ secara sukses. Akhirnya, kita berada di _state_ **Skeleton**. Kita melihat halaman baru dengan beberapa bagian yang hilang:
 
 ```js{6,7,9}
 <Suspense fallback={...}>
@@ -456,11 +455,11 @@ As we load more data, React will retry rendering, and `<ProfileDetails>` can ren
 </Suspense>
 ```
 
-Eventually, they load too, and we get to the **Complete** state.
+Suatu saat, bagian-bagian tersebut akan dimuat juga, dan kita mencapai _state_ **Complete**.
 
-This scenario (Receded → Skeleton → Complete) is the default one. However, the Receded state is not very pleasant because it "hides" existing information. This is why React lets us opt into a different sequence (**Pending** → Skeleton → Complete) with `useTransition`.
+Skenario ini (Receded → Skeleton → Complete) adalah skenario bawaan. Namun, _state_ Receded bukanlah pengalaman pengguna yang baik karena ia "menyembunyikan" informasi yang telah ada. Inilah mengapa React memungkinkan kita untuk memilih urutan berbeda (**Pending** → Skeleton → Complete) dengan `useTransition`.
 
-### Preferred: Pending → Skeleton → Complete {#preferred-pending-skeleton-complete}
+### Diinginkan: Pending → Skeleton → Complete {#preferred-pending-skeleton-complete}
 
 When we `useTransition`, React will let us "stay" on the previous screen -- and show a progress indicator there. We call that a **Pending** state. It feels much better than the Receded state because none of our existing content disappears, and the page stays interactive.
 
@@ -505,7 +504,7 @@ function ProfileTrivia({ resource }) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/focused-mountain-uhkzg)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/focused-mountain-uhkzg)**
 
 If you press "Open Profile" now, you can tell something is wrong. It takes a whole seven seconds to make the transition now! This is because our trivia API is too slow. Let's say we can't make the API faster. How can we improve the user experience with this constraint?
 
@@ -529,7 +528,7 @@ function ProfilePage({ resource }) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/condescending-shape-s6694)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/condescending-shape-s6694)**
 
 This reveals an important insight. React always prefers to go to the Skeleton state as soon as possible. Even if we use transitions with long timeouts everywhere, React will not stay in the Pending state for longer than necessary to avoid the Receded state.
 
@@ -564,7 +563,7 @@ function Button({ children, onClick }) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/floral-thunder-iy826)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/floral-thunder-iy826)**
 
 This signals to the user that some work is happening. However, if the transition is relatively short (less than 500ms), it might be too distracting and make the transition itself feel *slower*.
 
@@ -598,7 +597,7 @@ return (
 );
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/gallant-spence-l6wbk)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/gallant-spence-l6wbk)**
 
 With this change, even though we're in the Pending state, we don't display any indication to the user until 500ms has passed. This may not seem like much of an improvement when the API responses are slow. But compare how it feels [before](https://codesandbox.io/s/thirsty-liskov-1ygph) and [after](https://codesandbox.io/s/hardcore-http-s18xr) when the API call is fast. Even though the rest of the code hasn't changed, suppressing a "too fast" loading state improves the perceived performance by not calling attention to the delay.
 
@@ -612,11 +611,11 @@ The most important things we learned so far are:
 * If we don't want some component to delay the transition, we can wrap it in its own `<Suspense>` boundary.
 * Instead of doing `useTransition` in every other component, we can build it into our design system.
 
-## Other Patterns {#other-patterns}
+## Cara Lain {#other-patterns}
 
 Transitions are probably the most common Concurrent Mode pattern you'll encounter, but there are a few more patterns you might find useful.
 
-### Splitting High and Low Priority State {#splitting-high-and-low-priority-state}
+### Memisahkan State dengan Prioritas Tinggi dan Rendah {#splitting-high-and-low-priority-state}
 
 When you design React components, it is usually best to find the "minimal representation" of state. For example, instead of keeping `firstName`, `lastName`, and `fullName` in state, it's usually better keep only `firstName` and `lastName`, and then calculate `fullName` during rendering. This lets us avoid mistakes where we update one state but forget the other state.
 
@@ -658,7 +657,7 @@ function Translation({ resource }) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/brave-villani-ypxvf)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/brave-villani-ypxvf)**
 
 Notice how when you type into the input, the `<Translation>` component suspends, and we see the `<p>Loading...</p>` fallback until we get fresh results. This is not ideal. It would be better if we could see the *previous* translation for a bit while we're fetching the next one.
 
@@ -695,7 +694,7 @@ function App() {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/zen-keldysh-rifos)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/zen-keldysh-rifos)**
 
 Try typing into the input now. Something's wrong! The input is updating very slowly.
 
@@ -721,11 +720,11 @@ function handleChange(e) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/lively-smoke-fdf93)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/lively-smoke-fdf93)**
 
 With this change, it works as expected. We can type into the input immediately, and the translation later "catches up" to what we have typed.
 
-### Deferring a Value {#deferring-a-value}
+### Menangguhkan Sebuah Nilai {#deferring-a-value}
 
 By default, React always renders a consistent UI. Consider code like this:
 
@@ -786,7 +785,7 @@ function ProfileTimeline({ isStale, resource }) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/vigorous-keller-3ed2b)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/vigorous-keller-3ed2b)**
 
 The tradeoff we're making here is that `<ProfileTimeline>` will be inconsistent with other components and potentially show an older item. Click "Next" a few times, and you'll notice it. But thanks to that, we were able to cut down the transition time from 1000ms to 300ms.
 
@@ -817,7 +816,7 @@ function App() {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/pensive-shirley-wkp46)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/pensive-shirley-wkp46)**
 
 In this example, **every item in `<MySlowList>` has an artificial slowdown -- each of them blocks the thread for a few milliseconds**. We'd never do this in a real app, but this helps us simulate what can happen in a deep component tree with no single obvious place to optimize.
 
@@ -847,7 +846,7 @@ function App() {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/infallible-dewdney-9fkv9)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/infallible-dewdney-9fkv9)**
 
 Now typing has a lot less stutter -- although we pay for this by showing the results with a lag.
 
@@ -877,7 +876,7 @@ function ProfilePage({ resource }) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/proud-tree-exg5t)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/proud-tree-exg5t)**
 
 The API call duration in this example is randomized. If you keep refreshing it, you will notice that sometimes the posts arrive first, and sometimes the "fun facts" arrive first.
 
@@ -892,7 +891,7 @@ One way we could fix it is by putting them both in a single boundary:
 </Suspense>
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/currying-violet-5jsiy)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/currying-violet-5jsiy)**
 
 The problem with this is that now we *always* wait for both of them to be fetched. However, if it's the *posts* that came back first, there's no reason to delay showing them. When fun facts load later, they won't shift the layout because they're already below the posts.
 
@@ -922,7 +921,7 @@ function ProfilePage({ resource }) {
 }
 ```
 
-**[Try it on CodeSandbox](https://codesandbox.io/s/black-wind-byilt)**
+**[Coba di CodeSandbox](https://codesandbox.io/s/black-wind-byilt)**
 
 The `revealOrder="forwards"` option means that the closest `<Suspense>` nodes inside this list **will only "reveal" their content in the order they appear in the tree -- even if the data for them arrives in a different order**. `<SuspenseList>` has other interesting modes: try changing `"forwards"` to `"backwards"` or `"together"` and see what happens.
 
@@ -930,7 +929,7 @@ You can control how many loading states are visible at once with the `tail` prop
 
 Keep in mind that `<SuspenseList>` is composable, like anything in React. For example, you can create a grid by putting several `<SuspenseList>` rows inside a `<SuspenseList>` table.
 
-## Next Steps {#next-steps}
+## Selanjutnya {#next-steps}
 
 Concurrent Mode offers a powerful UI programming model and a set of new composable primitives to help you orchestrate delightful user experiences.
 
